@@ -10,6 +10,7 @@
 #include <xccompat.h>
 #include <string.h>
 #include <xs1.h>
+#include <xscope.h>
 #include "bcat_avb_controller.h"
 #include "ethernet_board_conf.h"
 #include "app_config.h"
@@ -21,20 +22,10 @@
 #include "audio_i2s.h"
 #include "gptp.h"
 #include "media_clock_server.h"
-#include "audio_clock_CS2300CP.h"
 #include "avb.h"
 #include "avb_1722_1.h"
 #include "avb_1722.h"
 #include "avb_srp.h"
-/*
-#include "audio_clock_CS2100CP.h"
-#include "audio_codec_CS4270.h"
-#include "debug_print.h"
-#include "media_fifo.h"
-#include "avb_1722_1_adp.h"
-#include "app_config.h"
-#include "aem_descriptor_types.h"
-*/
 // eth_status check include
 #include "ethernet_link_status.h"
 
@@ -99,13 +90,18 @@ enum avb_source_state_t avb_state;
  *      BCAT PORT DEFINITIONS
  *
  ***************************************************************/
+//port PORT_SPI_MISO     = on tile[0] : XS1_PORT_1A
+//port PORT_SPI_SS       = on tile[0] : XS1_PORT_1B
+//port PORT_SPI_CLK      = on tile[0] : XS1_PORT_1C
+//port PORT_SPI_MOSI     = on tile[0] : XS1_PORT_1D
 //port ADC_MCLK          = on tile[0] : XS1_PORT_1E;
 //port ADC_SCLK          = on tile[0] : XS1_PORT_1F;
 //port ADC_LRCLK         = on tile[0] : XS1_PORT_1G;
-//port PLL_SYNC_OUT      = on tile[0] : XS1_PORT_1I;
-//port UART_TO_HOST      = on tile[0] : XS1_PORT_1L
+//port UART_FROM_HOST    = on tile[0] : XS1_PORT_1I;
+//port UART_TO_HOST      = on tile[0] : XS1_PORT_1L;
 //port ADC_SDOUT         = on tile[0] : XS1_PORT_4C;
 //port ADC_SDIN          = on tile[0] : XS1_PORT_4D;
+
 //port PORT_ETH_RXCLK    = on tile[1] : XS1_PORT_1A;
 //port PORT_ETH_RXERR    = on tile[1] : XS1_PORT_1B;
 //port PORT_ETH_TXCLK    = on tile[1] : XS1_PORT_1C;
@@ -116,17 +112,21 @@ enum avb_source_state_t avb_state;
 //port PORT_ETH_MDC      = on tile[1] : XS1_PORT_1J;
 //port PORT_ETH_RXD      = on tile[1] : XS1_PORT_4C;
 //port PORT_ETH_TXD      = on tile[1] : XS1_PORT_4D;
+
 //port MIDI_OUT          = on tile[1] : XS1_PORT_4A;
 //port MIDI_IN           = on tile[1] : XS1_PORT_4B;
 //port GSYNC_SEL         = on tile[1] : XS1_PORT_4E;
+
 //port LED_nINT          = on tile[1] : XS1_PORT_1H;
 //port LED_SDA           = on tile[1] : XS1_PORT_1M;
 //port LED_SCL           = on tile[1] : XS1_PORT_1P;
+
 //port AB_SDA            = on tile[1] : XS1_PORT_1K;
 //port CD_SDA            = on tile[1] : XS1_PORT_1L;
 //port AB_SCL            = on tile[1] : XS1_PORT_1N;
 //port CD_SCL            = on tile[1] : XS1_PORT_1O;
-//port PORT_ETH_RSTN     = on tile[1] : XS1_PORT_1I;
+
+//port NOT_USED          = on tile[1] : XS1_PORT_1I;
 
 
 /***************************************************************
@@ -138,7 +138,7 @@ on tile[0] : otp_ports_t otp_ports0 = OTP_PORTS_INITIALIZER;
 
 //TODO
 // this pin does not exist :: PLL_SYNC_OUT, remapped UART_FROM_HOST (XS1_PORT_1I)
-on tile[0]: out buffered port:32 p_pll_sync_out[1] = {
+on tile[0]: out buffered port:32 p_fs[1] = {
         XS1_PORT_1I
 };
 on tile[1] :
@@ -196,12 +196,12 @@ on tile[0]: fl_spi_ports spi_ports = {
 };
 
 
-// i2s_ports_t constructor calls configure_clock_src(clock clk, void port p), from avb_audio/audio_i2s.xc
+// i2s_ports_t constructor from avb_audio/audio_i2s.xc
 on tile[0]: i2s_ports_t i2s_ports = {
-  I2S_MCLK, // mclk, clk 1
-  I2S_BCLK, // bclk, clk 2
-  XS1_PORT_1E, // p_mclk, must be 1 bit IN port, this port to clk 1
-  XS1_PORT_1F, // p_bclk, must be 1 bit OUT port, this port to clk 2
+  I2S_MCLK, // mclk, clkblk_3
+  I2S_BCLK, // bclk, clkblk_4
+  XS1_PORT_1E, // p_mclk, must be 1 bit IN port, this port to clk I2S_MCLK
+  XS1_PORT_1F, // p_bclk, must be 1 bit OUT port, this port from clk I2S_BCLK
   XS1_PORT_1G // p_lrclk, 1 bit OUT port
 };
 // configure_clock_src(i2s.mclk, i2s.p_mclk);
@@ -417,7 +417,8 @@ registers:
  */
 //TODO
 void I2C_ADC_init() {
-    if (DEBUG_P) printf("I2C_ADC_init() 12:57.\n");
+    if (DEBUG_P) printf("I2C_ADC_init() 15:14.\n");
+    // Control Port mode
     unsigned char read_data[2] = {0,0};
     unsigned char reg_mode_ctrl = 0x01;
     //unsigned char reg_dac_ctrl = 0x02;
@@ -532,7 +533,7 @@ void I2C_LED_test() {
 
     ETH_status();
 
-    while(1) {
+//    while(1) {
         // needs to be 16 == num of LEDs
         // need an on input change, not while loop constant poll...
         LED_i2c_buttons();
@@ -610,7 +611,7 @@ void I2C_LED_test() {
             state = !state;
         }
         delay_milliseconds(50);
-    }
+//    }
 }
 
 void I2C_init() {
@@ -717,6 +718,7 @@ void I2C_init() {
 [[combinable]]
 void application_task(client interface avb_interface avb, server interface avb_1722_1_control_callbacks i_1722_1_callbacks) {
     if (DEBUG_P) printf("applicationTask\n");
+    I2C_init();
 
     unsigned char aem_identify_control_value = 0;
 
@@ -746,6 +748,7 @@ void application_task(client interface avb_interface avb, server interface avb_1
     // if get 0: AVB_SOURCE_STATE_DISABLED
 */
     if (DEBUG_P) printf("application_task while loop\n");
+
     while (1) {
         select {
 
@@ -794,7 +797,30 @@ void application_task(client interface avb_interface avb, server interface avb_1
             }
         }
     }
+
 }
+
+/*
+#define NUM_SAMPLES 64
+unsigned int sine[NUM_SAMPLES] = {
+        4000,4392,4780,5161,5531,5886,6222,6538,6828,7092,7326,7528,7696,7828,7923,7981,
+        8000,7981,7923,7828,7696,7528,7326,7092,6828,6538,6222,5886,5531,5161,4780,4392,
+        4000,3608,3220,2839,2469,2114,1778,1462,1172,908,674,472,304,172,77,19,
+        0,19,77,172,304,472,674,908,1172,1462,1778,2114,2469,2839,3220,3608,
+};
+
+void audio_scope() {
+    //int sample;
+    while(1) {
+        //p_aud_din[0] :> sample;
+        //xscope_int(0, sample);
+        // not audio, check the clocks
+        for (unsigned int i = 0; i < NUM_SAMPLES; ++i) {
+            xscope_int(TEST, sine[i]);
+        }
+    }
+}
+*/
 
 int main(void) {
     // Ethernet channels
@@ -827,10 +853,6 @@ int main(void) {
     interface avb_1722_1_control_callbacks i_1722_1_callbacks;
 
     par {
-
-        on tile[1]: I2C_init();
-        //on tile[0]: init_delay();
-
         on tile[1]: avb_ethernet_server(avb_ethernet_ports,
                                            c_mac_rx,
                                            NUM_MAC_RX_CHANS,
@@ -841,14 +863,12 @@ int main(void) {
                                            null,
                                            c_buf_ctl,
                                            AVB_NUM_LISTENER_UNITS,
-                                           p_pll_sync_out,
+                                           p_fs,
                                            c_mac_rx[MAC_RX_TO_MEDIA_CLOCK],
                                            c_mac_tx[MAC_TX_TO_MEDIA_CLOCK],
                                            c_ptp,
                                            NUM_PTP_CHANS,
                                            PTP_GRANDMASTER_CAPABLE);
-
-        //on tile[1]: [[distribute]] audio_hardware_setup();
 
         // AVB - Audio
         on tile[0]: {
@@ -859,8 +879,6 @@ int main(void) {
             #if AVB_BCAT_ENABLE_LISTENER
                   init_media_output_fifos(ofifos, ofifo_data, AVB_NUM_MEDIA_OUTPUTS);
             #endif
-
-            //I2C_ADC_sdata();
 
             // i2s_ports struct on tile[0]
             i2s_master(i2s_ports,
@@ -911,7 +929,6 @@ int main(void) {
 
         on tile[1]: application_task(i_avb[AVB_MANAGER_TO_BCAT], i_1722_1_callbacks);
 
-
         on tile[0]: avb_1722_1_maap_task(otp_ports0,
                     i_avb[AVB_MANAGER_TO_1722_1],
                     i_1722_1_callbacks,
@@ -921,7 +938,7 @@ int main(void) {
                     c_ptp[PTP_TO_1722_1]);
 
         // for tile[0] rem out avb_1722_1_maap_task above to use OTP_query, vice versa
-        //on tile[1]: OTP_query();
+        //on tile[0]: OTP_query();
     }
     return 0;
 }
